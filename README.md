@@ -2,7 +2,7 @@
 
 ## Overview
 
-The QR Code Generator is a Python application that allows users to generate QR codes with various customization options. The application supports both dark and light themes and includes features such as generating QR codes from user inputs, uploading binary files, and converting keys to Base36 format.
+The QR Code Generator is a Python application that allows users to generate QR codes with various customization options. The application includes features such as generating QR codes from user inputs, uploading binary files, and converting keys to Base36 format.
 
 ## Architecture
 
