@@ -12,7 +12,7 @@ from converters import decode_base36_to_bytes, encode_bytes_to_base36_50chars
 from converters import calc_check_digit, mod_11_10
 
 import random
-import yaml
+
 
 
 class QRCodeApp:
