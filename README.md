@@ -42,5 +42,6 @@ Click the "Save Screenshot" button to save the QR code as an image file.
 
 Click the "Copy String" button to copy the generated QR code string to the clipboard.
 
-![alt text](image-1.png)
-![alt text](image-2.png)
+![Image 1](images/image-1.png)
+![Image 2](images/image-2.png)
+![Image](images/image.png)
