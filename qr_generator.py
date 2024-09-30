@@ -15,3 +15,5 @@ def generate_qr_code(data):
     
     # Return the QR code image as a PIL Image object
     return image
+
+
