@@ -14,6 +14,7 @@ from converters import calc_check_digit, mod_11_10
 import random
 import yaml
 
+
 class QRCodeApp:
     def __init__(self, root):
         self.root = root
