@@ -1,0 +1,29 @@
+
+
+cd "C:\Users\eldarb2\OneDrive - Medtronic PLC\Boris_Automation\Step_3_QR"
+
+pyinstaller --onefile --windowed --add-data "C:\Users\eldarb2\OneDrive - Medtronic PLC\Boris_Automation\Azure-ttk-theme\azure.tcl;Azure-ttk-theme" main.py
+
+
+pyinstaller --onefile --add-data "C:\Users\eldarb2\OneDrive - Medtronic PLC\Boris_Automation\Azure-ttk-theme\azure.tcl;Azure-ttk-theme" main.py
+
+pyinstaller --onefile --add-data "C:/Users/eldarb2/OneDrive - Medtronic PLC/Boris_Automation/Azure-ttk-theme/azure.tcl;Azure-ttk-theme" main.py
+
+
+------------------------------------------
+
+write me a python automation code:
+Open the GVT_V3.0.exe (desktop) then do this:
+1. Navigate to "Production User Config" tab
+2. Click on the Production State button (under the Erase section) then 
+3. click on Load User Production Package - then in the pop-up window (windows) choose this path "C:\Boris _ Formal_Tests\Production for Phase 3"
+and click on "Select Folder" button.
+4. Click on Set All Production data button then at the pop-up click OK.
+5. At the TeraTerm Screen : Verify this printing : [GLD_SETT] file CRC OK
+6. Send a request for the user (pop-up notification or similar) with the message to disconnect the USB from the GLD .
+7. in the GVT - wait for the USB light to turn RED color.
+8. Click on the top toggle switch with the USB writing then click on the BLE switch toggle beneath it with BLE Off writing.
+9. Wait 10 seconds.
+10. under that switch toggle is a drop down list - click on the list and choose this number (BLE ID) : 259710800
+11. Click on Connect button underneath it - at the pop-up click OK.
+12. in the GVT - click on Enter Operational Button and wait 15 seconds.
