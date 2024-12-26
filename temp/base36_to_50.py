@@ -47,6 +47,6 @@ def encode_bytes_to_base36_50chars(binary_data):
         return encoded_str.zfill(50)  # Pad with leading zeros if necessary
 
 # Example usage:
-binary_data = b'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'  # Replace with your actual byte data
+binary_data = b''  # Replace with your actual byte data
 encoded_key = encode_bytes_to_base36_50chars(binary_data)
 print(encoded_key)

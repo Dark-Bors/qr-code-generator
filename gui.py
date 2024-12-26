@@ -123,7 +123,7 @@ class QRCodeApp:
         self.id_field = ttk.Entry(self.form_frame)
         self.id_field.grid(row=4, column=1)
 
-        ttk.Label(self.form_frame, text="Key 1:").grid(row=5, column=0, sticky="w")
+        ttk.Label(self.form_frame, text="Key 1 (Base36):").grid(row=5, column=0, sticky="w")
         self.key1_field = ttk.Entry(self.form_frame)
         self.key1_field.grid(row=5, column=1)
         
@@ -132,7 +132,7 @@ class QRCodeApp:
         self.upload_key_btn.grid(row=5, column=3)
         
         # Convert to Base36 Button
-        self.convert_base36_btn = ttk.Button(self.form_frame, text="Convert to Base36", command=self.convert_to_base36)
+        self.convert_base36_btn = ttk.Button(self.form_frame, text="Convert to Base64", command=self.convert_to_base36)
         self.convert_base36_btn.grid(row=6, column=3, pady=10)
 
         # RadioButtons for RTV and Patient App
@@ -210,7 +210,8 @@ class QRCodeApp:
         ble_password_full = ble_password + ble_checksum  # Full BLE password with checksum
 
         # Hardcoded values instead of loading from config.yaml
-        cloud_url = "a1ngo0wsq2lw86-ats.iot.eu-central-1.amazonaws.com"
+        cloud_url = "a1y5k9515f72z8-ats.iot.eu-central-1.amazonaws.com"
+        # cloud_url = "a1ngo0wsq2lw86-ats.iot.eu-central-1.amazonaws.com"
         mqtt_prefix = "dev/things"
 
         # Generate the string based on toggle and step selection
@@ -263,6 +264,7 @@ class QRCodeApp:
                 with open(file_path, 'rb') as f:
                     binary_data = f.read()
                     base36_key = encode_bytes_to_base36_50chars(binary_data)
+                    print("base36 is: ", base36_key) # Debug
                     self.key1_field.delete(0, tk.END)
                     self.key1_field.insert(0, base36_key)
             except Exception as e:
@@ -286,6 +288,7 @@ class QRCodeApp:
                     with open(file_path, 'wb') as f:
                         f.write(binary_data)
                     print(f"Binary data saved to {file_path}")
+                    print("The data is: ", binary_data) # Debug
             except Exception as e:
                 print(f"Error converting to binary: {e}")
         else:
