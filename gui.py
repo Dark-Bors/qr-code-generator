@@ -102,11 +102,11 @@ class QRCodeApp:
         ttk.Label(self.form_frame, text="Enter GLD SN:").grid(row=0, column=0, sticky="w")
         self.sn_field = ttk.Entry(self.form_frame)
         self.sn_field.grid(row=0, column=1)
-        
+
         # Button to load SN from .yaml file
         self.load_yaml_btn = ttk.Button(self.form_frame, text="SN from .yaml", command=self.load_sn_from_yaml)
         self.load_yaml_btn.grid(row=0, column=3)
-        
+
         ttk.Label(self.form_frame, text="Enter BLE Password:").grid(row=1, column=0, sticky="w")
         self.ble_password_field = ttk.Entry(self.form_frame)
         self.ble_password_field.grid(row=1, column=1)
@@ -114,53 +114,66 @@ class QRCodeApp:
         ttk.Label(self.form_frame, text="Patient Name:").grid(row=2, column=0, sticky="w")
         self.patient_name_field = ttk.Entry(self.form_frame)
         self.patient_name_field.grid(row=2, column=1)
-        
+
         ttk.Label(self.form_frame, text="Patient Family Name:").grid(row=3, column=0, sticky="w")
         self.family_field = ttk.Entry(self.form_frame)
         self.family_field.grid(row=3, column=1)
-        
+
         ttk.Label(self.form_frame, text="Patient govID:").grid(row=4, column=0, sticky="w")
         self.id_field = ttk.Entry(self.form_frame)
         self.id_field.grid(row=4, column=1)
 
-        ttk.Label(self.form_frame, text="Key 1 (Base36):").grid(row=5, column=0, sticky="w")
+        ttk.Label(self.form_frame, text="Key 1:").grid(row=5, column=0, sticky="w")
         self.key1_field = ttk.Entry(self.form_frame)
         self.key1_field.grid(row=5, column=1)
-        
+
         # Upload Key_1 Button
         self.upload_key_btn = ttk.Button(self.form_frame, text="Upload Key_1", command=self.upload_key1_bin)
         self.upload_key_btn.grid(row=5, column=3)
-        
+
+        # Hardcoded Cloud URL Field
+        ttk.Label(self.form_frame, text="Cloud URL:").grid(row=6, column=0, sticky="w")
+        self.cloud_url_field = ttk.Entry(self.form_frame)
+        self.cloud_url_field.insert(0, "a1ngo0wsq2lw86-ats.iot.eu-central-1.amazonaws.com")  # Default value
+        self.cloud_url_field.grid(row=6, column=1)
+
+        # Hardcoded MQTT Prefix Field
+        ttk.Label(self.form_frame, text="MQTT Prefix:").grid(row=7, column=0, sticky="w")
+        self.mqtt_prefix_field = ttk.Entry(self.form_frame)
+        self.mqtt_prefix_field.insert(0, "dev/things")  # Default value
+        self.mqtt_prefix_field.grid(row=7, column=1)
+
         # Convert to Base36 Button
-        self.convert_base36_btn = ttk.Button(self.form_frame, text="Convert to Base64", command=self.convert_to_base36)
-        self.convert_base36_btn.grid(row=6, column=3, pady=10)
+        self.convert_base36_btn = ttk.Button(self.form_frame, text="Convert to Base36", command=self.convert_to_base36)
+        self.convert_base36_btn.grid(row=8, column=3, pady=10)
 
         # RadioButtons for RTV and Patient App
         self.step_var = tk.StringVar(value="None")
         self.rtv_radio = ttk.Radiobutton(self.form_frame, text="RTV", value="RTV", variable=self.step_var)
         self.patient_radio = ttk.Radiobutton(self.form_frame, text="Patient App", value="Patient App", variable=self.step_var)
-        
-        self.rtv_radio.grid(row=6, column=0, pady=5)
-        self.patient_radio.grid(row=6, column=1, pady=5)
-        
+
+        self.rtv_radio.grid(row=8, column=0, pady=5)
+        self.patient_radio.grid(row=8, column=1, pady=5)
+
         # Generate QR Button
         self.generate_qr_btn = ttk.Button(self.form_frame, text="Generate QR Code", command=self.generate_qr_code)
-        self.generate_qr_btn.grid(row=7, column=0, columnspan=2, pady=10)
-        
+        self.generate_qr_btn.grid(row=9, column=0, columnspan=2, pady=10)
+
         # Save Button
         self.save_btn = ttk.Button(self.form_frame, text="Save Screenshot", command=self.save_screenshot_handler)
-        self.save_btn.grid(row=8, column=0, columnspan=2, pady=10)
+        self.save_btn.grid(row=10, column=0, columnspan=2, pady=10)
 
         # Copy String Button
         self.copy_btn = ttk.Button(self.form_frame, text="Copy String", command=self.copy_string_handler)
-        self.copy_btn.grid(row=8, column=2, columnspan=2, pady=10)
+        self.copy_btn.grid(row=10, column=2, columnspan=2, pady=10)
 
         # Add a Text widget to display the output string
         self.output_text = tk.Text(self.form_frame, height=5, wrap=tk.WORD)
-        self.output_text.grid(row=9, column=0, columnspan=4, padx=15, pady=15)
+        self.output_text.grid(row=11, column=0, columnspan=4, padx=15, pady=15)
 
         # Enable mouse right-click copy/paste
         self.enable_copy_paste()
+
 
 
 
@@ -209,10 +222,9 @@ class QRCodeApp:
         ble_checksum = calc_check_digit(ble_password.lower())
         ble_password_full = ble_password + ble_checksum  # Full BLE password with checksum
 
-        # Hardcoded values instead of loading from config.yaml
-        cloud_url = "a1y5k9515f72z8-ats.iot.eu-central-1.amazonaws.com"
-        # cloud_url = "a1ngo0wsq2lw86-ats.iot.eu-central-1.amazonaws.com"
-        mqtt_prefix = "dev/things"
+        cloud_url = self.cloud_url_field.get()
+        mqtt_prefix = self.mqtt_prefix_field.get()
+
 
         # Generate the string based on toggle and step selection
         if self.toggle_var.get() == "HCP QR":
@@ -264,7 +276,6 @@ class QRCodeApp:
                 with open(file_path, 'rb') as f:
                     binary_data = f.read()
                     base36_key = encode_bytes_to_base36_50chars(binary_data)
-                    print("base36 is: ", base36_key) # Debug
                     self.key1_field.delete(0, tk.END)
                     self.key1_field.insert(0, base36_key)
             except Exception as e:
@@ -288,7 +299,6 @@ class QRCodeApp:
                     with open(file_path, 'wb') as f:
                         f.write(binary_data)
                     print(f"Binary data saved to {file_path}")
-                    print("The data is: ", binary_data) # Debug
             except Exception as e:
                 print(f"Error converting to binary: {e}")
         else:
