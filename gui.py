@@ -18,7 +18,7 @@ import random
 class QRCodeApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("QR Code Generator v1.0")
+        self.root.title("QR Code Generator v2.1")
         
         # Set the initial size of the app window
         self.root.geometry("650x580")
@@ -134,7 +134,7 @@ class QRCodeApp:
         # Hardcoded Cloud URL Field
         ttk.Label(self.form_frame, text="Cloud URL:").grid(row=6, column=0, sticky="w")
         self.cloud_url_field = ttk.Entry(self.form_frame)
-        self.cloud_url_field.insert(0, "a1ngo0wsq2lw86-ats.iot.eu-central-1.amazonaws.com")  # Default value
+        self.cloud_url_field.insert(0, "a1y5k9515f72z8-ats.iot.eu-central-1.amazonaws.com")  # Default value
         self.cloud_url_field.grid(row=6, column=1)
 
         # Hardcoded MQTT Prefix Field
