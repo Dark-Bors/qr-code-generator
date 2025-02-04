@@ -21,11 +21,16 @@ BASE36_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 def decode_base36_to_bytes(base36_string):
     # Step 1: Initialize the decoder with Base-36 characters
     decoder = RadixDecoder(BASE36_CHARS)
-    
+        
     # Step 2: Decode the Base-36 string back to binary data
     return decoder.decode(base36_string)
 
+
+
+
 # Example usage:
-base36_string = "2FDIU7I6KPZX4H9QOS6EQLDJGHD2UT5HX0E8BEKM0BKWIAX3DT"  # Your 50-char Base-36 string
+base36_string = "2P82RF94EHX0NZA9FGYQPXOZB5UORLQ21OFWYL33QIQ4JVVN4D"  # Your 50-char Base-36 string
 decoded_bytes = decode_base36_to_bytes(base36_string)
 print(decoded_bytes)
+
+
