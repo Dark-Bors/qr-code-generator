@@ -1,0 +1,43 @@
+# config.yaml
+
+# --- Cloud profiles shown as radio buttons in the GUI ---
+cloudProfiles:
+  newton:
+    cloudUrl: XXX.iot.eu-central-1.amazonaws.com
+    mqttPrefix: XXX/dev/things
+  davinci:
+    cloudUrl: XXX-ats.iot.eu-central-1.amazonaws.com
+    mqttPrefix: XXX/dev/things
+  manual:
+    cloudUrl: ""        # user can type in GUI
+    mqttPrefix: ""      # user can type in GUI
+
+# Which profile should be pre-selected on launch
+defaultProfile: XXX
+
+# Optional helper template for HCP/RTV QR composition
+hcpRtvTemplate: "bleSerial:<>;blePassword:<>;name:<>;govId:<>"
+
+# --- Autofill used by the "Fill All" button ---
+autofill:
+  # Serial number
+  sn: "259710800"
+
+  # Patient info
+  patientName: "Test"
+  # Leave govId empty; the app generates a 9-digit value each time Fill All is pressed
+  govId: ""
+
+  # Keys (as received from SAP)
+  # Key_1 = PKEY as Base36 (50 chars)
+  PKEY: "2FDIU7I6KPZX4H9QOS6EQLDJGHD2UT5HX0E8BEKM0BKWIAX3DT"
+  # Key_2 = MKEY as Base64 (must decode to 32 bytes)
+  MKEY: "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="
+
+  # Key_3 / Key_4 inputs from SAP (10-char each); app derives the hex with PBKDF2
+  BLE_ID: "ABCDEFGHIJ"
+  PATIENT_BLE_PWD: "ABCDEFGHIJ"
+
+  # Optional: if present, this fills the BLE password field BEFORE the app mirrors BLE_ID.
+  # Usually you can leave it blank so the GUI sets BLE password = BLE_ID.
+  # blePassword: ""
