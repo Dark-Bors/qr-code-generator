@@ -1,6 +1,6 @@
 # gui.py
 import os, base64, random, time, tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, simpledialog
 from pathlib import Path
 import shutil
 
@@ -15,10 +15,12 @@ from converters import (
     mkey_base64_to_bytes32, bytes32_to_base64,
 )
 from keys_helpers import derive_key_hex, derive_key_bytes
-from sap_api import fetch_keys, fetch_certs
+from sap_api import fetch_keys, fetch_certs, SAPError
 from algorithms import mod_11_10, calc_check_digit
 from qr_generator import generate_qr_code
-from utils import save_screenshot, load_yaml_sn, load_cloud_profiles, load_autofill
+from utils import (
+    save_screenshot, load_yaml_sn, load_cloud_profiles, load_autofill
+)
 
 APP_VERSION = "v3.0.0"
 
@@ -28,19 +30,16 @@ ctk.set_default_color_theme("dark-blue")
 CA_FILENAME = "AWS_StarfieldCA_C2_And_G2.pem"
 CA_PATH = Path(__file__).with_name(CA_FILENAME)
 
-
-# -------------------------- tiny tooltip --------------------------
+# -------------------------- simple tooltip --------------------------
 class _ToolTip(tk.Toplevel):
-    def __init__(self, widget, text):
+    def __init__(self, widget, text, **kw):
         super().__init__(widget)
         self.wm_overrideredirect(True)
         self.wm_attributes("-topmost", True)
-        self.label = tk.Label(
-            self, text=text, justify="left",
-            background="#333333", foreground="white",
-            relief="solid", borderwidth=1, padx=6, pady=4,
-            font=("Segoe UI", 9)
-        )
+        self.label = tk.Label(self, text=text, justify="left",
+                              background="#333333", foreground="white",
+                              relief="solid", borderwidth=1, padx=6, pady=4,
+                              font=("Segoe UI", 9))
         self.label.pack()
         self.withdraw()
 
@@ -56,8 +55,7 @@ def attach_tooltip(widget, text: str):
     widget.bind("<Enter>", show)
     widget.bind("<Leave>", hide)
 
-
-# -------------------------- main app --------------------------
+# -------------------------- app --------------------------
 class QRCodeApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -155,55 +153,58 @@ class QRCodeApp(ctk.CTk):
     def _build_keys_panel(self, parent):
         panel = ctk.CTkFrame(parent); panel.pack(fill="x", pady=6)
 
-        # ------------------- Key 1 (PKEY) -------------------
+        # PKEY (Key_1)
         ctk.CTkLabel(panel, text="Key_1 (PKEY, Base36 from SAP)").grid(row=0, column=0, sticky="w")
         self.pkey_long = ctk.CTkEntry(panel, width=420, placeholder_text="Base36 (50 chars)")
         self.pkey_long.grid(row=0, column=1, padx=6, pady=4)
         ctk.CTkLabel(panel, text="Short (ASCII if printable, else hex)").grid(row=0, column=2, sticky="w")
         self.pkey_short = ctk.CTkEntry(panel, width=420); self.pkey_short.grid(row=0, column=3, padx=6, pady=4)
+        btn = ctk.CTkButton(panel, text="Upload", command=self._upload_pkey_bin)
+        btn.grid(row=0, column=4, padx=6, pady=4)
         attach_tooltip(self.pkey_short,
             "Key_1 Short shows the raw 32 bytes.\n"
-            "If bytes are printable ASCII (e.g., 'aaaaaaaa…'), you see ASCII.\n"
-            "Otherwise it shows 64-hex.\n"
+            "If bytes form printable ASCII (e.g., 'aaaaaaaa...'), you see ASCII.\n"
+            "Otherwise it shows hexadecimal.\n"
             "Use Short→Long to convert back to Base36.")
+        attach_tooltip(btn, "Upload a 32-byte PKEY .bin and fill Short + Long.")
 
-        # Button row (aligned): Long→Short | Short→Long | Upload
         ctk.CTkButton(panel, text="Long→Short", command=self._pkey_long_to_short)\
-            .grid(row=1, column=1, sticky="w", padx=6, pady=(0,8))
+            .grid(row=1, column=1, sticky="w", padx=6, pady=(0,6))
         ctk.CTkButton(panel, text="Short→Long", command=self._pkey_short_to_long)\
-            .grid(row=1, column=2, sticky="w", padx=6, pady=(0,8))
-        ctk.CTkButton(panel, text="Upload", command=self._upload_pkey_bin)\
-            .grid(row=1, column=3, sticky="w", padx=6, pady=(0,8))
+            .grid(row=1, column=3, sticky="w", padx=6, pady=(0,6))
 
-        # ------------------- Key 2 (MKEY) -------------------
-        ctk.CTkLabel(panel, text="Key_2 (MKEY, Base64 from SAP)").grid(row=2, column=0, sticky="w")
+        # MKEY (Key_2)
+        ctk.CTkLabel(panel, text="Key_2 (MKEY, Base64 from SAP)").grid(row=2, column=0, sticky="w", pady=(8,0))
         self.mkey_long = ctk.CTkEntry(panel, width=420, placeholder_text="Base64 (32 bytes)")
-        self.mkey_long.grid(row=2, column=1, padx=6, pady=4)
-        ctk.CTkLabel(panel, text="Short (ASCII if printable, else hex)").grid(row=2, column=2, sticky="w")
-        self.mkey_short = ctk.CTkEntry(panel, width=420); self.mkey_short.grid(row=2, column=3, padx=6, pady=4)
+        self.mkey_long.grid(row=2, column=1, padx=6, pady=(8,4))
+        ctk.CTkLabel(panel, text="Short (ASCII if printable, else hex)").grid(row=2, column=2, sticky="w", pady=(8,0))
+        self.mkey_short = ctk.CTkEntry(panel, width=420); self.mkey_short.grid(row=2, column=3, padx=6, pady=(8,4))
+        btn2 = ctk.CTkButton(panel, text="Upload", command=self._upload_mkey_bin)
+        btn2.grid(row=2, column=4, padx=6, pady=(8,4))
         attach_tooltip(self.mkey_short,
-            "Key_2 Short shows the raw 32 bytes (ASCII if printable, else 64-hex).\n"
+            "Key_2 Short shows the raw 32 bytes (ASCII if printable, else hex).\n"
             "Long field holds canonical Base64 from SAP.\n"
             "Use Short→Long to encode to Base64.")
+        attach_tooltip(btn2, "Upload a 32-byte MKEY .bin and fill Short + Long.")
 
-        # Button row (aligned): Long→Short | Short→Long | Upload
-        ctk.CTkButton(panel, text="Long→Short", command=self._mkey_long_to_short)\
-            .grid(row=3, column=1, sticky="w", padx=6, pady=(0,8))
+        ctk.CTkButton(panel, text="Long→Short", command=self._mkey_normalize)\
+            .grid(row=3, column=1, sticky="w", padx=6, pady=(0,6))
         ctk.CTkButton(panel, text="Short→Long", command=self._mkey_short_to_long)\
-            .grid(row=3, column=2, sticky="w", padx=6, pady=(0,8))
-        ctk.CTkButton(panel, text="Upload", command=self._upload_mkey_bin)\
-            .grid(row=3, column=3, sticky="w", padx=6, pady=(0,8))
+            .grid(row=3, column=3, sticky="w", padx=6, pady=(0,6))
 
-        # ------------------- Key 3 / Key 4 (derived only) -------------------
-        ctk.CTkLabel(panel, text="Key_3 BLE_ID").grid(row=4, column=0, sticky="w", pady=(6,0))
+        # Key_3 / Key_4
+        ctk.CTkLabel(panel, text="Key_3 BLE_ID").grid(row=4, column=0, sticky="w", pady=(8,0))
         self.ble_id_entry = ctk.CTkEntry(panel, width=220)
-        self.ble_id_entry.grid(row=4, column=1, sticky="w", padx=6, pady=(6,4))
-        ctk.CTkLabel(panel, text="Derived Hex").grid(row=4, column=2, sticky="w", pady=(6,0))
+        self.ble_id_entry.grid(row=4, column=1, sticky="w", padx=6, pady=(8,4))
+        ctk.CTkLabel(panel, text="Derived Hex").grid(row=4, column=2, sticky="w", pady=(8,0))
         self.key3_hex = ctk.CTkEntry(panel, width=420)
-        self.key3_hex.grid(row=4, column=3, sticky="w", padx=6, pady=(6,4))
+        self.key3_hex.grid(row=4, column=3, sticky="w", padx=6, pady=(8,4))
+        btn3 = ctk.CTkButton(panel, text="Upload", command=self._upload_key3_bin)
+        btn3.grid(row=4, column=4, padx=6, pady=(8,4))
         attach_tooltip(self.key3_hex,
-            "Key_3 is PBKDF2-HMAC-SHA256 (salted, 310k rounds).\n"
+            "Key_3 is a PBKDF2-HMAC-SHA256 derivation (salted, 310k rounds).\n"
             "It is one-way: derived Hex cannot be reversed to BLE_ID.")
+        attach_tooltip(btn3, "Upload a 32-byte derived Key_3 .bin. This cannot recover the BLE_ID.")
 
         ctk.CTkLabel(panel, text="Key_4 PATIENT_BLE_PWD").grid(row=5, column=0, sticky="w")
         self.pble_entry = ctk.CTkEntry(panel, width=220)
@@ -211,15 +212,17 @@ class QRCodeApp(ctk.CTk):
         ctk.CTkLabel(panel, text="Derived Hex").grid(row=5, column=2, sticky="w")
         self.key4_hex = ctk.CTkEntry(panel, width=420)
         self.key4_hex.grid(row=5, column=3, sticky="w", padx=6, pady=4)
+        btn4 = ctk.CTkButton(panel, text="Upload", command=self._upload_key4_bin)
+        btn4.grid(row=5, column=4, padx=6, pady=4)
         attach_tooltip(self.key4_hex,
-            "Key_4 is PBKDF2-HMAC-SHA256 (salted, 310k rounds).\n"
+            "Key_4 is a PBKDF2-HMAC-SHA256 derivation (salted, 310k rounds).\n"
             "It is one-way: derived Hex cannot be reversed to PATIENT_BLE_PWD.")
+        attach_tooltip(btn4, "Upload a 32-byte derived Key_4 .bin. This cannot recover the PATIENT_BLE_PWD.")
 
-        # Actions for keys/certs
         ctk.CTkButton(panel, text="Save certificates", command=self._save_certs_button)\
-            .grid(row=6, column=1, sticky="w", padx=6, pady=(4,6))
+            .grid(row=6, column=1, sticky="w", padx=6, pady=(0,6))
         ctk.CTkButton(panel, text="Save keys (.bin)", command=self._save_all_keys)\
-            .grid(row=6, column=3, sticky="e", padx=6, pady=(4,6))
+            .grid(row=6, column=3, sticky="e", padx=6, pady=(0,6))
 
     def _build_qr_area(self, parent):
         self.output = ctk.CTkTextbox(parent, width=1100, height=100, wrap=tk.WORD)
@@ -252,13 +255,12 @@ class QRCodeApp(ctk.CTk):
         self.cloud_entry.configure(state=state); self.mqtt_entry.configure(state=state)
 
     def _pick_qr_save_dir(self, sn: str) -> str | None:
-        # If a Production folder exists (created by Fetch), save under Production/QR-Code
         if self.prod_dir and os.path.isdir(self.prod_dir):
             qr_dir = os.path.join(self.prod_dir, "QR-Code")
             os.makedirs(qr_dir, exist_ok=True)
             return qr_dir
-        # Otherwise ask the user where to save
-        return filedialog.askdirectory(title="Choose folder to save the QR files (PNG + TXT)") or None
+        base = filedialog.askdirectory(title="Choose folder to save the QR files (PNG + TXT)")
+        return base or None
 
     def _ensure_prod_dir(self, sn: str) -> str:
         base_dir = filedialog.askdirectory(title="Choose destination folder for Production data")
@@ -289,16 +291,12 @@ class QRCodeApp(ctk.CTk):
     def _save_certs_files(self, sn: str, certs: dict, out_dir: str):
         pub_raw = certs.get("AUTH_PUBLIC_KEY", "")
         prv_raw = certs.get("AUTH_PRIVATE_KEY", "")
-        # 1) raw one-liner with literal \n
         with open(os.path.join(out_dir, f"cert_string_{sn}.txt"), "w", encoding="utf-8") as f:
             f.write(self._one_line_with_escapes(pub_raw))
-        # 2) proper PEM .crt
         with open(os.path.join(out_dir, f"{sn}-certificate.pem.crt"), "w", encoding="utf-8") as f:
             f.write(self._normalize_pem(pub_raw))
-        # 3) proper PEM .key
         with open(os.path.join(out_dir, f"{sn}-private.pem.key"), "w", encoding="utf-8") as f:
             f.write(self._normalize_pem(prv_raw))
-        # Root CA (project local)
         if CA_PATH.exists():
             try:
                 shutil.copy(str(CA_PATH), os.path.join(out_dir, CA_FILENAME))
@@ -362,10 +360,10 @@ class QRCodeApp(ctk.CTk):
             self._log("No 'autofill' block in config.yaml.")
             return
 
-        # clear fields
+        # clear all relevant fields
         for e in (self.sn_entry, self.ble_entry, self.pname_entry, self.govid_entry,
-                  self.pkey_long, self.pkey_short, self.mkey_long, self.mkey_short,
-                  self.ble_id_entry, self.key3_hex, self.pble_entry, self.key4_hex):
+                self.pkey_long, self.pkey_short, self.mkey_long, self.mkey_short,
+                self.ble_id_entry, self.key3_hex, self.pble_entry, self.key4_hex):
             e.delete(0, tk.END)
 
         sn      = data.get("sn")
@@ -383,7 +381,7 @@ class QRCodeApp(ctk.CTk):
 
         ble_id = _pick(data, "BLE_ID", "ble_id", "bleId", "bleID")
         pble   = _pick(data, "PATIENT_BLE_PWD", "patient_ble_pwd", "patientBlePwd", "patientBLEPWD")
-        ble_pw = data.get("blePassword")
+        ble_pw = data.get("blePassword")  # optional BLE password for QR
 
         if sn:      self.sn_entry.insert(0, str(sn))
         if name:    self.pname_entry.insert(0, str(name))
@@ -397,29 +395,41 @@ class QRCodeApp(ctk.CTk):
         else:
             self.govid_entry.insert(0, str(gov_raw))
 
-        # Key_1 and Key_2 via the same helpers as buttons
+        # Key_1: show short as ASCII if printable, else hex
         if pkey:
             self._set_key1_from_long(pkey)
+
+        # Key_2
         if mkey:
             self._set_key2_from_long(mkey)
 
-        # Key_3 / Key_4 (derived) + mirror BLE Password = BLE_ID
+        # Key_3 / Key_4 (derived)
         if ble_id:
+            # fill BLE_ID
             self.ble_id_entry.insert(0, ble_id)
-            self.ble_entry.delete(0, tk.END); self.ble_entry.insert(0, ble_id)
+            # mirror BLE Password = BLE_ID (as requested)
+            self.ble_entry.delete(0, tk.END)
+            self.ble_entry.insert(0, ble_id)
             try:
                 self.key3_hex.insert(0, derive_key_hex(ble_id))
             except Exception as e:
                 self._log(f"Warn: Key_3 derivation failed: {e}")
+        else:
+            self._log("BLE_ID not found in YAML.")
+
+
         if pble:
             self.pble_entry.insert(0, pble)
             try:
                 self.key4_hex.insert(0, derive_key_hex(pble))
             except Exception as e:
                 self._log(f"Warn: Key_4 derivation failed: {e}")
+        else:
+            self._log("PATIENT_BLE_PWD not found in YAML (tried PATIENT_BLE_PWD/patient_ble_pwd/patientBlePwd/patientBLEPWD).")
 
         self.prod_dir = None
         self._log("Fields filled from YAML (autofill).")
+
 
     def _load_sn_from_yaml(self):
         self.sn_entry.delete(0, tk.END)
@@ -436,33 +446,35 @@ class QRCodeApp(ctk.CTk):
         try:
             rec = fetch_keys(sn)
             self._log("Fetched keys from SAP.")
-
-            # Fill BLE + mirror BLE Password
             self.ble_id_entry.delete(0, tk.END);  self.ble_id_entry.insert(0, rec["BLE_ID"])
-            self.ble_entry.delete(0, tk.END);     self.ble_entry.insert(0, rec["BLE_ID"])
+            self.ble_entry.delete(0, tk.END);     self.ble_entry.insert(0, rec["BLE_ID"])            # mirror BLE Password = BLE_ID
+            self.pkey_long.delete(0, tk.END);     self.pkey_long.insert(0, rec["PKEY"])
+            self.mkey_long.delete(0, tk.END);     # will fill after normalize below
+            self.pble_entry.delete(0, tk.END);    self.pble_entry.insert(0, rec["PATIENT_BLE_PWD"])
 
-            # Fill Key_1/Key_2 using the SAME helpers as the buttons
+            # Key_1 and Key_2: EXACT same logic as Long→Short buttons
             self._set_key1_from_long(rec["PKEY"])
             self._set_key2_from_long(rec["MKEY"])
 
-            # Keep raw bytes for saving .bin
+            # keep raw bytes for saving .bin
             pkey_raw = pkey_base36_to_bytes32(rec["PKEY"])
             mkey_raw = mkey_base64_to_bytes32(rec["MKEY"])
 
-            # Derived keys (Key_3 / Key_4)
+            # Key_3 / Key_4
             k3_raw = derive_key_bytes(rec["BLE_ID"])
             self.key3_hex.delete(0, tk.END); self.key3_hex.insert(0, k3_raw.hex())
             k4_raw = derive_key_bytes(rec["PATIENT_BLE_PWD"])
             self.key4_hex.delete(0, tk.END); self.key4_hex.insert(0, k4_raw.hex())
 
-            # Save everything to Production_data
             out_dir = self._ensure_prod_dir(sn)
             self._save_keys_files(sn, out_dir, pkey_raw, mkey_raw, k3_raw, k4_raw)
             self._log("Keys saved into Production_data.")
+
             certs = fetch_certs(sn)
             self._log("Fetched certificates from SAP.")
             self._save_certs_files(sn, certs, out_dir)
             self._log("Certificates saved into Production_data.")
+
             messagebox.showinfo("Done", f"All production data saved in:\n{out_dir}")
 
         except Exception as e:
@@ -510,7 +522,7 @@ class QRCodeApp(ctk.CTk):
             self._log(f"Note: could not back-fill PKEY Base36: {e}")
 
     # ------- Key2 converters & upload -------
-    def _mkey_long_to_short(self):
+    def _mkey_normalize(self):
         self._set_key2_from_long(self.mkey_long.get().strip())
 
     def _mkey_short_to_long(self):
@@ -527,13 +539,26 @@ class QRCodeApp(ctk.CTk):
         self.mkey_short.delete(0, tk.END); self.mkey_short.insert(0, ascii32 if ascii32 is not None else raw.hex())
         self.mkey_long.delete(0, tk.END);  self.mkey_long.insert(0, bytes32_to_base64(raw))
 
-    # ------- shared read + save -------
+    # ------- Key3/Key4 uploads (derived; non-reversible) -------
+    def _upload_key3_bin(self):
+        raw = self._read_32_from_file("Select Key_3 .bin")
+        if raw is None: return
+        self.key3_hex.delete(0, tk.END); self.key3_hex.insert(0, raw.hex())
+        self._log("Key_3 uploaded (derived bytes). Note: PBKDF2 is one-way; BLE_ID cannot be recovered.")
+
+    def _upload_key4_bin(self):
+        raw = self._read_32_from_file("Select Key_4 .bin")
+        if raw is None: return
+        self.key4_hex.delete(0, tk.END); self.key4_hex.insert(0, raw.hex())
+        self._log("Key_4 uploaded (derived bytes). Note: PBKDF2 is one-way; PATIENT_BLE_PWD cannot be recovered.")
+
     def _read_32_from_file(self, title: str) -> bytes | None:
         path = filedialog.askopenfilename(
             title=title,
             filetypes=[("Binary files", "*.bin"), ("All files", "*.*")]
         )
-        if not path: return None
+        if not path:
+            return None
         try:
             with open(path, "rb") as f:
                 raw = f.read()
@@ -570,7 +595,6 @@ class QRCodeApp(ctk.CTk):
             messagebox.showerror("Save error", str(e))
             self._log(f"Save error: {e}")
 
-    # ------- QR -------
     def _ble_with_checksum_upper(self, ble: str) -> str:
         if not ble: return ""
         return ble + calc_check_digit(ble.lower()).upper()
@@ -636,35 +660,39 @@ class QRCodeApp(ctk.CTk):
             self._log(f"QR saved: {os.path.basename(png_path)}, {os.path.basename(txt_path)}")
         except Exception as e:
             self._log(f"Warning: could not save QR assets: {e}")
-
-    # ------- long→short helpers (used by buttons, Fill, Fetch) -------
+            
     def _set_key1_from_long(self, b36: str):
-        """Fill Key_1 fields from Base36 (SAP) using the exact same logic everywhere."""
+        """Fill Key_1 fields from a Base36 (SAP) string, using the same logic as Long→Short."""
         self.pkey_long.delete(0, tk.END)
         self.pkey_short.delete(0, tk.END)
         if not b36:
             return
         try:
             raw = pkey_base36_to_bytes32(b36)
-            self.pkey_long.insert(0, b36)  # keep SAP long as-is
+            # keep long as-is (Base36 from SAP)
+            self.pkey_long.insert(0, b36)
+            # short = ASCII if printable, else hex
             ascii32 = self._bytes_to_ascii_if_printable(raw)
             self.pkey_short.insert(0, ascii32 if ascii32 is not None else raw.hex())
         except Exception as e:
             self._log(f"Key_1 set-from-long failed: {e}")
 
     def _set_key2_from_long(self, b64: str):
-        """Fill Key_2 fields from Base64 (SAP) using the exact same logic everywhere."""
+        """Fill Key_2 fields from a Base64 (SAP) string, using the same logic as Long→Short."""
         self.mkey_long.delete(0, tk.END)
         self.mkey_short.delete(0, tk.END)
         if not b64:
             return
         try:
             raw = mkey_base64_to_bytes32(b64)
-            self.mkey_long.insert(0, bytes32_to_base64(raw))  # canonical
+            # long = canonical Base64
+            self.mkey_long.insert(0, bytes32_to_base64(raw))
+            # short = ASCII if printable, else hex
             ascii32 = self._bytes_to_ascii_if_printable(raw)
             self.mkey_short.insert(0, ascii32 if ascii32 is not None else raw.hex())
         except Exception as e:
             self._log(f"Key_2 set-from-long failed: {e}")
+
 
     def _copy_string(self):
         s = self.output.get("1.0", tk.END)

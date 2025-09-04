@@ -1,4 +1,5 @@
-# ISO 7064 Mod 10,11 (for SN checksum)
+# algorithms.py
+# ISO 7064 Mod 11,10 (for SN checksum)
 def mod_11_10(number):
     check = 10
     for n in number:
