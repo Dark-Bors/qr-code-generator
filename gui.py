@@ -59,8 +59,9 @@ def attach_tooltip(widget, text: str):
 
 # -------------------------- main app --------------------------
 class QRCodeApp(ctk.CTk):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, config, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.config_data = config
         self.title(f"Fetching Production Data and QR generator {APP_VERSION}")
         self.geometry("1280x980")
 
@@ -92,7 +93,7 @@ class QRCodeApp(ctk.CTk):
         ctk.CTkButton(bar, text="SN from .yaml", command=self._load_sn_from_yaml)\
             .pack(side="left", padx=6)
 
-        ctk.CTkButton(bar, text="Download certificates (SAP)", command=self._download_certs_only)\
+        ctk.CTkButton(bar, text="Save certificates (SAP)", command=self._download_certs_only)\
             .pack(side="right", padx=6)
 
         self.fetch_btn = ctk.CTkButton(bar, text="Fetch keys from SAP", command=self._fetch_from_sap)
@@ -440,6 +441,10 @@ class QRCodeApp(ctk.CTk):
             # Fill BLE + mirror BLE Password
             self.ble_id_entry.delete(0, tk.END);  self.ble_id_entry.insert(0, rec["BLE_ID"])
             self.ble_entry.delete(0, tk.END);     self.ble_entry.insert(0, rec["BLE_ID"])
+            
+            # ✅ Fill Key_4 plaintext (PATIENT_BLE_PWD) — this was missing
+            self.pble_entry.delete(0, tk.END)
+            self.pble_entry.insert(0, rec.get("PATIENT_BLE_PWD", ""))
 
             # Fill Key_1/Key_2 using the SAME helpers as the buttons
             self._set_key1_from_long(rec["PKEY"])
@@ -582,7 +587,31 @@ class QRCodeApp(ctk.CTk):
 
     def _generate_qr(self):
         sn = self.sn_entry.get().strip()
-        ble = self.ble_entry.get().strip()
+        # --------- NEW selection logic for BLE (choose from bottom fields) ----------
+        # Determine BLE to use depending on QR type + step, with sensible fallbacks.
+        chosen_ble = ""
+        if self.qr_type.get() == "HCP QR":
+            if self.step.get() == "Patient App":
+                # HCP + Patient App -> use PATIENT_BLE_PWD (key_4 plaintext)
+                chosen_ble = self.pble_entry.get().strip() or self.ble_entry.get().strip()
+            else:
+                # HCP + RTV -> use BLE_ID (key_3 plaintext)
+                chosen_ble = self.ble_id_entry.get().strip() or self.ble_entry.get().strip()
+        else:
+            # For Kit QR prefer the explicit BLE Password field, otherwise fall back to bottom fields
+            chosen_ble = self.ble_entry.get().strip() or self.ble_id_entry.get().strip() or self.pble_entry.get().strip()
+
+        # Mirror chosen BLE into the middle BLE Password entry so UI reflects it
+        try:
+            self.ble_entry.delete(0, tk.END)
+            if chosen_ble:
+                self.ble_entry.insert(0, chosen_ble)
+        except Exception:
+            # if for some reason ble_entry is not available, ignore
+            pass
+
+        # Continue reading other fields (use possibly-updated BLE from chosen_ble)
+        ble = chosen_ble
         cloud = self.cloud_entry.get().strip()
         mqtt  = self.mqtt_entry.get().strip()
         name  = self.pname_entry.get().strip()
@@ -591,6 +620,21 @@ class QRCodeApp(ctk.CTk):
 
         if not sn:
             messagebox.showerror("Missing", "SN is required."); return
+
+        # Generate fallback values for name and govid if missing
+        if not name:
+            name = f"Tester {random.randint(1, 9999)}"
+            # reflect back into UI
+            try:
+                self.pname_entry.delete(0, tk.END); self.pname_entry.insert(0, name)
+            except Exception:
+                pass
+        if not govid:
+            govid = str(random.randint(12345, 999999999))
+            try:
+                self.govid_entry.delete(0, tk.END); self.govid_entry.insert(0, govid)
+            except Exception:
+                pass
 
         sn_full  = sn + mod_11_10(sn)
         ble_full = self._ble_with_checksum_upper(ble) if ble else ""
@@ -636,6 +680,7 @@ class QRCodeApp(ctk.CTk):
             self._log(f"QR saved: {os.path.basename(png_path)}, {os.path.basename(txt_path)}")
         except Exception as e:
             self._log(f"Warning: could not save QR assets: {e}")
+
 
     # ------- long→short helpers (used by buttons, Fill, Fetch) -------
     def _set_key1_from_long(self, b36: str):
