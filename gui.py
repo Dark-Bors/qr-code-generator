@@ -294,29 +294,63 @@ class QRCodeApp(ctk.CTk):
     def _save_certs_files(self, sn: str, certs: dict, out_dir: str):
         pub_raw = certs.get("AUTH_PUBLIC_KEY", "")
         prv_raw = certs.get("AUTH_PRIVATE_KEY", "")
-        # 1) raw one-liner with literal \n
-        with open(os.path.join(out_dir, f"cert_string_{sn}.txt"), "w", encoding="utf-8") as f:
-            f.write(self._one_line_with_escapes(pub_raw))
-        # 2) proper PEM .crt
-        with open(os.path.join(out_dir, f"{sn}-certificate.pem.crt"), "w", encoding="utf-8") as f:
-            f.write(self._normalize_pem(pub_raw))
-        # 3) proper PEM .key
-        with open(os.path.join(out_dir, f"{sn}-private.pem.key"), "w", encoding="utf-8") as f:
-            f.write(self._normalize_pem(prv_raw))
-        # Root CA (project local)
-        if CA_PATH.exists():
-            try:
-                shutil.copy(str(CA_PATH), os.path.join(out_dir, CA_FILENAME))
-                self._log(f"{CA_FILENAME} copied.")
-            except Exception as e:
-                self._log(f"Warning: could not copy Root CA: {e}")
-        legacy = Path(__file__).with_name("AmazonRootCA.pem")
-        if legacy.exists():
-            try:
-                shutil.copy(str(legacy), os.path.join(out_dir, "AmazonRootCA.pem"))
-                self._log("AmazonRootCA.pem copied.")
-            except Exception as e:
-                self._log(f"Warning: could not copy AmazonRootCA.pem: {e}")
+        self._log(f"[CertTool] Start saving certs for SN={sn}")
+
+        # --- Normalize ---
+        def normalize_pem_string(pem_str: str) -> bytes:
+            if "\\n" in pem_str:
+                self._log("[CertTool] Converting escaped newlines to real newlines")
+                pem_str = pem_str.encode("utf-8").decode("unicode_escape")
+            pem_bytes = pem_str.replace("\r\n", "\n").replace("\r", "\n").encode("ascii")
+            if not pem_bytes.endswith(b"\n"):
+                pem_bytes += b"\n"
+            if not pem_bytes.endswith(b"\n\0"):
+                pem_bytes += b"\0"
+            return pem_bytes
+
+        cert_bytes = normalize_pem_string(pub_raw)
+        key_bytes  = normalize_pem_string(prv_raw)
+
+        # --- Parse & verify ---
+        try:
+            cert = x509.load_pem_x509_certificate(cert_bytes, default_backend())
+            private_key = serialization.load_pem_private_key(key_bytes, password=None, backend=default_backend())
+            self._log("[CertTool] ✅ Parsed cert & key successfully")
+        except Exception as e:
+            self._log(f"[CertTool] ❌ Parsing error: {e}")
+            raise
+
+        # --- Check key–cert match ---
+        if cert.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        ) != private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        ):
+            self._log("[CertTool] ❌ Private key does NOT match certificate")
+            raise RuntimeError("Private key mismatch")
+        else:
+            self._log("[CertTool] ✅ Verified key–cert match")
+
+        # --- Save normalized PEMs ---
+        cert_path = os.path.join(out_dir, f"{sn}_IoTCore_certificate.pem.crt")
+        key_path  = os.path.join(out_dir, f"{sn}_private.pem.key")
+        with open(cert_path, "wb") as f: f.write(cert_bytes)
+        with open(key_path, "wb") as f: f.write(key_bytes)
+        self._log(f"[CertTool] Files saved:\n  {cert_path}\n  {key_path}")
+
+        # --- Fingerprints ---
+        cert_fp = hashlib.sha256(cert_bytes).hexdigest()
+        key_fp  = hashlib.sha256(key_bytes).hexdigest()
+        self._log(f"[CertTool] SHA256 fingerprints:\n  cert={cert_fp}\n  key ={key_fp}")
+
+        # --- Final bytes check ---
+        with open(key_path, "rb") as f:
+            tail = f.read()[-4:]
+        self._log(f"[CertTool] File end bytes: {tail.hex()} (should end with 0a00)")
+        self._log("[CertTool] Done.\n")
+
 
     def _save_keys_files(self, sn: str, out_dir: str, pkey_raw: bytes, mkey_raw: bytes,
                          k3_raw: bytes, k4_raw: bytes):
