@@ -1,26 +1,31 @@
-Set-Content .gitignore @"
-# Python
+# --- Python build/cache ---
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+
+# --- Virtual environments ---
 .venv/
 venv/
-.env
-*.log
+.env/
+env/
 
-# Editors/OS
+# --- Logs & temp ---
+*.log
+*.tmp
+
+# --- Editors / OS metadata ---
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
 
-# Build / dist
+# --- Build & distribution outputs ---
 build/
 dist/
 *.spec
 
-# Generated output (keys/certs/qr exports)
+# --- Generated output (certs / QR / keys / production) ---
 Production_data_*/
 QR-Code/
 keys_*/
@@ -29,8 +34,8 @@ certificates_*/
 *.png
 *.svg
 
-# Local config (keep example only)
+# --- Local configuration ---
+# Keep example version only, never push personal one
 config.yaml
-"@
-config.yaml
-config.yaml
+config_local.yaml
+config_backup.yaml

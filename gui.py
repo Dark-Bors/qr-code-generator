@@ -1,4 +1,5 @@
 # gui.py
+import hashlib
 import os, base64, random, time, tkinter as tk
 from tkinter import filedialog, messagebox
 from pathlib import Path
@@ -19,8 +20,11 @@ from sap_api import fetch_keys, fetch_certs
 from algorithms import mod_11_10, calc_check_digit
 from qr_generator import generate_qr_code
 from utils import save_screenshot, load_yaml_sn, load_cloud_profiles, load_autofill
+from cryptography import x509
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
 
-APP_VERSION = "v3.0.0"
+APP_VERSION = "v3.1.0"
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
