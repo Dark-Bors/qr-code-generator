@@ -2,7 +2,6 @@
 """
 Utility functions for Fetch Production Data (FPD)
 Author : Boris Eldar
-Version: 4.3.0
 Provides YAML loaders, screenshot capture, and profile helpers.
 """
 
@@ -60,28 +59,21 @@ def load_cloud_profiles(yaml_path: str = "config.yaml"):
 # ─────────────────────────────────────────────
 # Load Auto-Fill Section
 # ─────────────────────────────────────────────
-def load_autofill(yaml_path: str = "config.yaml") -> dict:
-    """
-    Reads optional 'autofill' section from config.yaml
-    Example:
-      autofill:
-        sn: "259710800"
-        patientName: "Test"
-        govId: "123456789"
-        PKEY: "ABCDEF..."
-        MKEY: "XXXX="
-        BLE_ID: "ABCDEFGHIJ"
-        PATIENT_BLE_PWD: "1234567890"
-    """
-    if not os.path.exists(yaml_path):
+def load_autofill() -> dict:
+    """Load autofill data from config.yaml (section: autofill)."""
+    cfg_path = os.path.join(os.getcwd(), "config.yaml")
+    if not os.path.exists(cfg_path):
+        print(f"[WARN] config.yaml not found at {cfg_path}")
         return {}
-    try:
-        with open(yaml_path, "r", encoding="utf-8") as f:
+
+    with open(cfg_path, "r", encoding="utf-8") as f:
+        try:
             cfg = yaml.safe_load(f) or {}
-        return cfg.get("autofill") or {}
-    except Exception as e:
-        print(f"⚠️ Failed to read autofill data: {e}")
-        return {}
+            return cfg.get("autofill", {})  # section key
+        except Exception as e:
+            print(f"[ERROR] Failed to load YAML: {e}")
+            return {}
+
 
 
 # ─────────────────────────────────────────────

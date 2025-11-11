@@ -1,0 +1,64 @@
+# ─────────────────────────────────────────────
+# Fetch Production Data (FPD) - Configuration
+# Version: 4.2.0
+# Author: Boris Eldar
+# ─────────────────────────────────────────────
+
+sap:
+  # SAP service endpoints
+  base_url: "https://tlvm7aappd040.cfrf.medtronic.com/sap/bc"
+  client: "300"
+  cert_endpoint: "zws_g_get_sn"      # Certificate retrieval endpoint
+  key_endpoint: "zws_g_get_keys"     # Keys retrieval endpoint
+
+paths:
+  # Default folders (can be changed at runtime)
+  output_root: "C:/Users/eldarb2/Downloads"
+  temp: "./temp"
+  certs: "./certs"
+
+certificates:
+  # Default names for downloaded certificates
+  iot_cert_name: "IoTCore_certificate_final.pem.crt"
+  private_key_name: "private_final.pem.key"
+  combined_name: "combined.pem"
+
+qr:
+  # Default MQTT endpoints used for QR generation
+  newton_cloud_url: "a1y5k9515f72z8-ats.iot.eu-central-1.amazonaws.com"
+  davinci_cloud_url: "a1ngo0wsq2lw86-ats.iot.eu-central-1.amazonaws.com"
+  mqtt_prefix_newton: "newton/dev/things"
+  mqtt_prefix_davinci: "davinci/dev/things"
+
+logging:
+  # Logging preferences
+  enable_debug: true
+  log_to_file: true
+  log_file: "./fpd_debug.log"
+
+ui:
+  # UI preferences
+  theme: "dark"
+  default_width: 1180
+  default_height: 900
+  font: "Segoe UI"
+  version: "v4.2.0"
+
+autofill:
+  # Serial number
+  sn: "259710800"
+
+  # Patient info
+  patientName: "Test"
+  # Leave govId empty; the app generates a 9-digit value each time Fill All is pressed
+  govId: ""
+
+  # Keys (as received from SAP)
+  # Key_1 = PKEY as Base36 (50 chars)
+  PKEY: "2FDIU7I6KPZX4H9QOS6EQLDJGHD2UT5HX0E8BEKM0BKWIAX3DT"
+  # Key_2 = MKEY as Base64 (must decode to 32 bytes)
+  MKEY: "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="
+
+  # Key_3 / Key_4 inputs from SAP (10-char each); app derives the hex with PBKDF2
+  BLE_ID: "ABCDEFGHIJ"
+  PATIENT_BLE_PWD: "ABCDEFGHIJ"

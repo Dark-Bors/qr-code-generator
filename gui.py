@@ -496,33 +496,40 @@ class FPDApp(ctk.CTk):
 
 
     # ─────────────── UTILS ───────────────
-    def _autofill_keys(self):
-        for k, v in self.autofill.items():
-            if k in self.entries:
-                self.entries[k].delete(0, "end")
-                self.entries[k].insert(0, v)
-        self._log("⚙️ Keys auto-filled from YAML.", "info")
-        
     def _fill_all_fields(self):
-        """Auto-fill all key and custom QR fields from YAML autofill."""
-        autofill = self.autofill or {}
-        # Fill keys
-        for k, v in autofill.items():
-            if k in self.entries:
-                self.entries[k].delete(0, "end")
-                self.entries[k].insert(0, v)
-        # Fill QR custom fields if present
-        if "customRTV" in autofill:
-            self.custom_rtv.set(autofill["customRTV"])
-        if "customPatient" in autofill:
-            self.custom_patient.set(autofill["customPatient"])
-        self._log("⚙️ All fields auto-filled from YAML.", "info")
+        """Fill all entries from config.yaml -> 'autofill' section."""
+        data = self.autofill or {}
+        if not data:
+            self._log("⚠️ No autofill data found in config.yaml.", "error")
+            return
 
+        # Fill SN
+        if data.get("sn"):
+            self.sn_entry.delete(0, "end")
+            self.sn_entry.insert(0, data["sn"])
 
-    def _copy_keys(self):
-        joined = "\n".join([f"{k}: {self.entries[k].get()}" for k in self.entries])
-        pyperclip.copy(joined)
-        self._log("📋 Keys copied to clipboard.", "info")
+        # Fill PKEY, MKEY, BLE_ID, PATIENT_BLE_PWD
+        for key in ("PKEY", "MKEY", "BLE_ID", "PATIENT_BLE_PWD"):
+            if key in self.entries:
+                self.entries[key].delete(0, "end")
+                self.entries[key].insert(0, data.get(key, ""))
+
+        # Fill QR custom fields
+        patient_name = data.get("patientName", "Patient")
+        gov_id = data.get("govId") or str(__import__("random").randint(100000000, 999999999))
+
+        self.custom_rtv_entry.delete(0, "end")
+        self.custom_rtv_entry.insert(0,
+            f"bleSerial:{data.get('sn')};blePassword:{data.get('BLE_ID')};name:{patient_name};govId:{gov_id}"
+        )
+
+        self.custom_patient_entry.delete(0, "end")
+        self.custom_patient_entry.insert(0,
+            f"bleSerial:{data.get('sn')};blePassword:{data.get('PATIENT_BLE_PWD')};cloudUrl:a1y5k9515f72z8-ats.iot.eu-central-1.amazonaws.com;mqttPrefix:newton/dev/things"
+        )
+
+        self._log("⚙️ All fields auto-filled from config.yaml.", "success")
+
 
 # ───────────────────────────────────────────────
     # SMART CONVERSION + VALIDATION LOGIC
