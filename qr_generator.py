@@ -1,19 +1,23 @@
+# qr_generator.py
+"""
+QR Generator helper for FPD GUI
+"""
+
 import qrcode
-from PIL import Image
+from pathlib import Path
 
-# Function to generate a QR code from the provided data (result string)
-def generate_qr_code(data):
-    qr_code = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_L,
-        box_size=10,
-        border=4,
-    )
-    qr_code.add_data(data)
-    qr_code.make(fit=True)
-    image = qr_code.make_image(fill_color="black", back_color="white")
+def generate_qr_from_sn(sn: str, output_dir: str = "output") -> str:
+    """
+    Generates a QR code PNG for the provided serial number (SN).
+    Returns the path to the saved file.
+    """
+    if not sn:
+        raise ValueError("Serial number required for QR generation.")
     
-    # Return the QR code image as a PIL Image object
-    return image
+    Path(output_dir).mkdir(exist_ok=True)
+    qr_path = Path(output_dir) / f"{sn}_qr.png"
 
-
+    img = qrcode.make(sn)
+    img.save(qr_path)
+    print(f"✅ QR saved: {qr_path}")
+    return str(qr_path)
