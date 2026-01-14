@@ -1,11 +1,12 @@
 """
 ===============================================================================
- Fetch Production Data (FPD) Tool  
+ Fetch Production Data (FPD) Tool (v6.0.0)
 -------------------------------------------------------------------------------
  Author : Boris Eldar
  Purpose: Main launcher for the FPD GUI tool
           (Fetches SAP production data, verifies certificates,
            and manages device provisioning for GLD and related platforms)
+ New in v6.0: Batch Processing, One-Click Auto-Run, Threading, EXE Build
 ===============================================================================
 """
 

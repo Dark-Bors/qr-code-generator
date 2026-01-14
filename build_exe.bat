@@ -24,7 +24,7 @@ REM --add-data: Include config.example.yaml (we can't include real config safely
 REM Note: config.yaml is usually external for editing. We won't bundle it inside the EXE so it remains editable.
 REM We just build the EXE.
 
-pyinstaller --noconsole --onefile --name "FPD_Tool_v4.3" --icon=NONE main.py
+pyinstaller --noconsole --onefile --name "FPD_Tool_v6.0.0" --icon=NONE main.py
 
 echo.
 echo [SUCCESS] Build complete!
