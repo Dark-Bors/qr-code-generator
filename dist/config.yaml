@@ -1,0 +1,48 @@
+# ─────────────────────────────────────────────
+# Fetch Production Data (FPD) - Configuration
+# Version: 4.2.0
+# Author: Boris Eldar
+# ─────────────────────────────────────────────
+
+sap:
+  base_url: "https://tlvm7aappd040.cfrf.medtronic.com/sap/bc"
+  client: "300"
+  cert_endpoint: "zws_g_get_sn"
+  key_endpoint: "zws_g_get_keys"
+
+paths:
+  output_root: "C:/Users/eldarb2/Downloads"
+  temp: "./temp"
+  certs: "./certs"
+
+certificates:
+  iot_cert_name: "IoTCore_certificate_final.pem.crt"
+  private_key_name: "private_final.pem.key"
+  combined_name: "combined.pem"
+
+qr:
+  newton_cloud_url: "a1y5k9515f72z8-ats.iot.eu-central-1.amazonaws.com"
+  davinci_cloud_url: "a1ngo0wsq2lw86-ats.iot.eu-central-1.amazonaws.com"
+  mqtt_prefix_newton: "newton/dev/things"
+  mqtt_prefix_davinci: "davinci/dev/things"
+
+logging:
+  enable_debug: true
+  log_to_file: true
+  log_file: "./fpd_debug.log"
+
+ui:
+  theme: "dark"
+  default_width: 1180
+  default_height: 900
+  font: "Segoe UI"
+  version: "v4.2.0"
+
+autofill:
+  sn: "259710800"
+  patientName: "Test"
+  govId: ""
+  PKEY: "2FDIU7I6KPZX4H9QOS6EQLDJGHD2UT5HX0E8BEKM0BKWIAX3DT"
+  MKEY: "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="
+  BLE_ID: "ABCDEFGHIJ"
+  PATIENT_BLE_PWD: "ABCDEFGHIJ"
