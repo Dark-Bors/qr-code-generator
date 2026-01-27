@@ -2,17 +2,22 @@
 # Author: Boris Eldar
 # (Refactored to MVC - View)
 
-import os
-import platform
-import time
-import threading
-from datetime import datetime
+# gui.py
+import tkinter as tk
+import logging
 from tkinter import filedialog, messagebox, BooleanVar, StringVar
+import threading
+import platform
+from datetime import datetime
+from typing import Optional
+
 import customtkinter as ctk
-import traceback
+from PIL import Image
 
 from version import VERSION
+# Controller
 from fpd_controller import FPDController
+
 
 # ─────────────────────────────────────────────
 # THEME

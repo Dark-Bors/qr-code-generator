@@ -3,159 +3,123 @@
  Fetch Production Data (FPD) Tool (v6.0.0)
 -------------------------------------------------------------------------------
  Author : Boris Eldar
- Purpose: Main launcher for the FPD GUI tool
-          (Fetches SAP production data, verifies certificates,
-           and manages device provisioning for GLD and related platforms)
- New in v6.0: Batch Processing, One-Click Auto-Run, Threading, EXE Build
+ Purpose: Main launcher for the FPD GUI tool.
+          Fetches SAP production data, verifies certificates, and manages 
+          device provisioning.
 ===============================================================================
 """
 
 import os
 import sys
-import traceback
+import shutil
 import platform
-import importlib.util
-import textwrap  # 🆕
-import tkinter.messagebox as mbox  # 🆕
+import logging
+import traceback
+import tkinter.messagebox as mbox
+from pathlib import Path
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 🧰 Environment & Path Setup
 # ─────────────────────────────────────────────────────────────────────────────
 from version import VERSION as APP_VERSION
+
 APP_NAME = "Fetch Production Data (FPD)"
 
 # Detect correct working directory (handles .exe vs. dev run)
-if getattr(sys, 'frozen', False):  # running from compiled exe
-    ROOT_DIR = os.path.dirname(sys.executable)
-else:  # running from source
-    ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, 'frozen', False):
+    ROOT_DIR = Path(sys.executable).parent
+else:
+    ROOT_DIR = Path(__file__).resolve().parent
 
-VENV_DIR = os.path.join(ROOT_DIR, "venv")
-CONFIG_PATH = os.path.join(ROOT_DIR, "config.yaml")
+CONFIG_PATH = ROOT_DIR / "config.yaml"
+Example_CONFIG_PATH = ROOT_DIR / "config.example.yaml"
+LOG_FILE = ROOT_DIR / "fpd_debug.log"
 
+# Setup Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(LOG_FILE, encoding="utf-8")
+    ]
+)
+logger = logging.getLogger("Main")
 
-# Add project root to sys.path if not already
-if ROOT_DIR not in sys.path:
-    sys.path.append(ROOT_DIR)
+if str(ROOT_DIR) not in sys.path:
+    sys.path.append(str(ROOT_DIR))
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 🧩 Optional: Check that CustomTkinter is installed
+# 🧩 Dependency Check
 # ─────────────────────────────────────────────────────────────────────────────
 def ensure_dependencies():
     try:
-        import customtkinter  # noqa
+        import customtkinter  # noqa: F401
     except ImportError:
-        print("❌ ERROR: 'customtkinter' not found in current environment.")
-        print("👉 Run: python -m pip install customtkinter")
+        logger.error("'customtkinter' not found.")
+        mbox.showerror("Missing Dependency", "The 'customtkinter' library is missing.\nPlease run: pip install customtkinter")
         sys.exit(1)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 🆕 Ensure config.yaml exists (create default if missing)
+# 🆕 Config Management
 # ─────────────────────────────────────────────────────────────────────────────
 def ensure_config_yaml():
-    """Create default config.yaml if it doesn't exist."""
-    if os.path.exists(CONFIG_PATH):
-        print("✅ Found existing config.yaml")
+    """Ensure config.yaml exists by copying example if available."""
+    if CONFIG_PATH.exists():
+        logger.info(f"✅ Config found: {CONFIG_PATH}")
         return
 
-    default_yaml = textwrap.dedent("""\
-        # ─────────────────────────────────────────────
-        # Fetch Production Data (FPD) - Configuration
-        # Version: 4.2.0
-        # Author: Boris Eldar
-        # ─────────────────────────────────────────────
-
-        sap:
-          base_url: "https://tlvm7aappd040.cfrf.medtronic.com/sap/bc"
-          client: "300"
-          cert_endpoint: "zws_g_get_sn"
-          key_endpoint: "zws_g_get_keys"
-
-        paths:
-          output_root: "C:/Users/eldarb2/Downloads"
-          temp: "./temp"
-          certs: "./certs"
-
-        certificates:
-          iot_cert_name: "IoTCore_certificate_final.pem.crt"
-          private_key_name: "private_final.pem.key"
-          combined_name: "combined.pem"
-
-        qr:
-          newton_cloud_url: "a1y5k9515f72z8-ats.iot.eu-central-1.amazonaws.com"
-          davinci_cloud_url: "a1ngo0wsq2lw86-ats.iot.eu-central-1.amazonaws.com"
-          mqtt_prefix_newton: "newton/dev/things"
-          mqtt_prefix_davinci: "davinci/dev/things"
-
-        logging:
-          enable_debug: true
-          log_to_file: true
-          log_file: "./fpd_debug.log"
-
-        ui:
-          theme: "dark"
-          default_width: 1180
-          default_height: 900
-          font: "Segoe UI"
-          version: "v4.2.0"
-
-        autofill:
-          sn: "259710800"
-          patientName: "Test"
-          govId: ""
-          PKEY: "2FDIU7I6KPZX4H9QOS6EQLDJGHD2UT5HX0E8BEKM0BKWIAX3DT"
-          MKEY: "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="
-          BLE_ID: "ABCDEFGHIJ"
-          PATIENT_BLE_PWD: "ABCDEFGHIJ"
-    """)
-
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        f.write(default_yaml)
-
-    print(f"🆕 Created default config.yaml → {CONFIG_PATH}")
-
+    logger.warning("⚠️ config.yaml not found. Attempting to create from template...")
+    
+    if Example_CONFIG_PATH.exists():
+        try:
+            shutil.copy(Example_CONFIG_PATH, CONFIG_PATH)
+            logger.info("✅ Created config.yaml from config.example.yaml")
+            mbox.showinfo("Configuration Created", "A default 'config.yaml' has been created.")
+            return
+        except Exception as e:
+            logger.error(f"Failed to copy config example: {e}")
+    
+    # Fallback to minimal if example missing
+    default_yaml = """
+sap:
+  endpoint: "https://tlvm7aapps032.cfrf.medtronic.com/sap/bc/zws_g_get_sn?sap-client=300&SN={sn}"
+  verifyTLS: false
+paths:
+  output_root: "./output"
+"""
     try:
-        mbox.showinfo(
-            "Configuration Created",
-            "A default 'config.yaml' has been generated.\nYou can edit it if needed before rerunning the app."
-        )
-    except Exception:
-        pass
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 🪄 Optional: Print System Info for Debugging
-# ─────────────────────────────────────────────────────────────────────────────
-def print_startup_info():
-    print("──────────────────────────────────────────────")
-    print(f"🧩  Launching {APP_NAME}  ({APP_VERSION})")
-    print(f"💻  Platform : {platform.system()} {platform.release()}")
-    print(f"🐍  Python   : {platform.python_version()}")
-    print(f"📂  Working  : {ROOT_DIR}")
-    print("──────────────────────────────────────────────\n")
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            f.write(default_yaml)
+        logger.warning("⚠️ Created minimal config.yaml (template missing).")
+    except Exception as e:
+         logger.error(f"Failed to write config.yaml: {e}")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 🚀 Main Entry Point
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
     try:
+        logger.info(f"🚀 Launching {APP_NAME} {APP_VERSION} on {platform.system()}")
         ensure_dependencies()
-        ensure_config_yaml()  # 🆕 Make sure config.yaml exists
-        print_startup_info()
+        ensure_config_yaml()
 
-        from gui import FPDApp  # lazy import GUI class
+        from gui import FPDApp
         app = FPDApp()
         app.mainloop()
 
     except KeyboardInterrupt:
-        print("\n🛑 Interrupted by user. Exiting gracefully...")
+        logger.info("🛑 Interrupted by user.")
         sys.exit(0)
     except Exception:
-        print("❌ Fatal error while launching GUI:")
-        print(traceback.format_exc())
+        err = traceback.format_exc()
+        logger.critical(f"❌ Fatal error:\n{err}")
+        try:
+            mbox.showerror("Fatal Error", f"Application failed to start:\n{err}")
+        except:
+             pass # simple print if GUI fails
         sys.exit(1)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 🏁 Run
-# ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     main()
+

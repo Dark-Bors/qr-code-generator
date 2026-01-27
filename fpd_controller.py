@@ -2,20 +2,21 @@
 """
 Controller for Fetch Production Data (FPD).
 Handles business logic, state management, and interaction with helper modules.
+Enforces Verified Business Logic for Certificate Generation (v3.1.0 Parity).
 """
 
 import os
 import time
-import traceback
+import logging
 import platform
 import qrcode
+import re
 from datetime import datetime
-from datetime import datetime
-import json
+from typing import Dict, List, Optional, Tuple, Any
 from PIL import Image, ImageDraw, ImageFont
 
 # Helper modules
-from sap_api import fetch_certs, fetch_keys
+from sap_api import fetch_certs, fetch_keys, _load_config
 from keys_helpers import save_all_keys, derive_key_hex, derive_key_bytes
 from converters import (
     pkey_base36_to_bytes32, bytes32_to_pkey_base36,
@@ -25,41 +26,57 @@ from algorithms import mod_11_10, calc_check_digit
 from utils import load_autofill
 
 HISTORY_FILE = "history.json"
+logger = logging.getLogger(__name__)
 
 class FPDController:
+    """
+    Main Controller class for the FPD Logic.
+    
+    Responsibilities:
+    - Input Validation (SN, paths)
+    - Orchestrating SAP Data Fetching
+    - Verified Certificate Saving (CRITICAL LOGIC)
+    - QR Code Generation and Bundling
+    """
+
     def __init__(self, log_callback=None):
         """
-        :param log_callback: Function(msg, level) to send logs to the UI/Console
+        Initialize the controller.
+        
+        Args:
+             log_callback: Optional callable(msg, level) for GUI feedback.
         """
         self.log_callback = log_callback
-        self.sap_data = {}
-        self.current_sn = ""
-        self.autofill_data = load_autofill()
+        self.sap_data: Dict[str, str] = {}
+        self.current_sn: str = ""
+        self.autofill_data: Dict[str, Any] = load_autofill() or {}
+        self.history: List[Dict[str, str]] = []
         self._load_history()
 
     def validate_sn_format(self, sn: str) -> bool:
         """
         Validates SN format.
-        Current Rule: 9 digits (Medtronic/Covidien legacy format often 9 digits).
-        Adjust logic as needed.
+        Current Rule: 9 digits.
         """
         if not sn: return False
-        import re
         # Example strict rule: ^\d{9}$ (Exactly 9 digits)
-        # Modify this regex if your SNs follow different patterns.
-        # Based on example inputs: 253000069 (9 digits)
         return bool(re.match(r"^\d{9}$", sn.strip()))
 
-    def _load_history(self):
+    def _load_history(self) -> None:
+        """Loads operation history from JSON file."""
+        import json
         self.history = []
         if os.path.exists(HISTORY_FILE):
             try:
                 with open(HISTORY_FILE, "r") as f:
                     self.history = json.load(f)
-            except:
+            except Exception as e:
+                logger.warning(f"Failed to load history: {e}")
                 self.history = []
 
-    def _append_history(self, sn, folder):
+    def _append_history(self, sn: str, folder: str) -> None:
+        """Appends a new record to the history file."""
+        import json
         record = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "sn": sn,
@@ -71,17 +88,16 @@ class FPDController:
             with open(HISTORY_FILE, "w") as f:
                 json.dump(self.history, f, indent=2)
             self._log("📜 History updated.")
-        except:
+        except Exception:
             pass
 
-    def get_history(self):
+    def get_history(self) -> List[Dict[str, str]]:
         return self.history
 
-    def get_config(self):
-        from sap_api import _load_config
+    def get_config(self) -> Dict[str, Any]:
         return _load_config()
 
-    def save_config(self, new_config):
+    def save_config(self, new_config: Dict[str, Any]) -> None:
         from sap_api import CONFIG_PATH
         import yaml
         try:
@@ -91,7 +107,7 @@ class FPDController:
         except Exception as e:
             self._log(f"❌ Config save failed: {e}", "error")
 
-    def _log(self, msg, level="info"):
+    def _log(self, msg: str, level: str = "info") -> None:
         if self.log_callback:
             self.log_callback(msg, level)
         else:
@@ -100,17 +116,7 @@ class FPDController:
     # ─────────────────────────────────────────────
     # SAP FETCHING
     # ─────────────────────────────────────────────
-    def fetch_sap_data(self, sn: str) -> dict:
-        """
-        Fetch data from SAP for the given SN.
-        Updates internal state and returns the data dict.
-        """
-        if not sn:
-            raise ValueError("Serial Number is required.")
-        
-        self._log(f"ℹ️ Fetching SAP data for SN={sn} ...")
-        
-    def fetch_sap_data(self, sn: str) -> dict:
+    def fetch_sap_data(self, sn: str) -> Dict[str, str]:
         """
         Fetch data from SAP for the given SN.
         Updates internal state and returns the data dict.
@@ -130,42 +136,122 @@ class FPDController:
             self._log(f"❌ SAP fetch failed: {e}", "error")
             raise
 
-    # ─────────────────────────────────────────────
-    # SAVE / VERIFY
-    # ─────────────────────────────────────────────
-    def verify_and_save_all(self, sn: str, base_folder: str = None) -> str:
+    # ─────────────────────────────────────────────────────────────
+    # SAVE / VERIFY (CRITICAL SECTION - DO NOT MODIFY LOGIC)
+    # ─────────────────────────────────────────────────────────────
+    # Verified Logic for robust PEM normalization (V3.1.0 Parity)
+    def _normalize_pem(self, s: str) -> str:
+        """
+        Normalize PEM string: handles escaped newlines and ensures proper line breaks (LF).
+        """
+        # Handle literal "\n" characters if present (escaped in source)
+        if "\\n" in s and "\n" not in s:
+            s = s.replace("\\r\\n", "\n").replace("\\n", "\n")
+        # Normalize CRLF to LF, strip, and ensure single trailing newline
+        return s.replace("\r\n", "\n").strip() + ("\n" if not s.endswith("\n") else "")
+
+    def _one_line_with_escapes(self, s: str) -> str:
+        """
+        Converts a multi-line string into a single line with escaped newlines.
+        """
+        return s.replace("\r\n", "\n").replace("\n", "\\n")
+
+    def verify_and_save_all(self, sn: str, base_folder: Optional[str] = None) -> str:
         """
         Fetches data (if needed), verifies, and saves all files to a timestamped folder.
-        Returns the path to the created folder.
+        
+        Args:
+            sn: Serial Number
+            base_folder: Root directory to save the output folder in.
+            
+        Returns:
+            The path to the created timestamped folder.
         """
         if not sn:
-            raise ValueError("Serial number is required.")
-
-        # 1. Fetch Data
-        self._log(f"🔍 Verifying and fetching SAP data for SN={sn} ...")
-        data = self.fetch_sap_data(sn) # Reuse fetch logic
-
-        # 2. Create Folder
+            raise ValueError("Serial Number is required.")
         if not base_folder:
             raise ValueError("No output folder selected.")
         
+        # 1. Fetch Data
+        self._log(f"🔍 Verifying and fetching SAP data for SN={sn} ...")
+        # Reuse internal fetch logic which populates self.sap_data
+        data: Dict[str, str] = self.fetch_sap_data(sn) 
+
+        # 2. Create Folder
+        # FIX: Check if base_folder is already a device specific folder from a previous run
+        folder_name = os.path.basename(base_folder.rstrip(os.sep))
+        # Regex for _YYYYMMDD_HHMM (e.g., _20260119_1428)
+        if re.search(r"_\d{8}_\d{4}$", folder_name):
+             self._log(f"⚠️ Selected folder '{folder_name}' looks like a device output folder.", "info")
+             base_folder = os.path.dirname(base_folder)
+             if base_folder: # Validate dirname didn't return empty for root
+                self._log(f"🔄 Auto-adjusted base folder to parent: {base_folder}", "warning")
+
         timestamp = time.strftime("%Y%m%d_%H%M")
+        # Ensure base_folder is not None (checker logic above allows it conceptually but typed arg is Optional)
+        if base_folder is None:
+             raise ValueError("Base folder logic error.")
+             
         folder = os.path.join(base_folder, f"{sn}_{timestamp}")
         os.makedirs(folder, exist_ok=True)
         self._log(f"📁 Created output folder: {folder}")
 
-        # 3. Save Certificates
+        # 3. Save Certificates & Keys (Verified v3.1.0 Logic)
+        # ---------------------------------------------------------------------
         cert_text = data.get("AUTH_PUBLIC_KEY", "")
         key_text = data.get("AUTH_PRIVATE_KEY", "")
-        
+
         if cert_text and key_text:
-            cert_path = os.path.join(folder, "IoTCore_certificate_final.pem.crt")
-            key_path = os.path.join(folder, "private_final.pem.key")
-            with open(cert_path, "w", encoding="utf-8") as f:
-                f.write(cert_text.strip())
-            with open(key_path, "w", encoding="utf-8") as f:
-                f.write(key_text.strip())
-            self._log(f"📁 Certs saved.", "success")
+            # 1) Raw one-liner with literal \n
+            path_txt = os.path.join(folder, f"cert_string_{sn}.txt")
+            with open(path_txt, "w", encoding="utf-8") as f:
+                f.write(self._one_line_with_escapes(cert_text))
+            
+            # 2) Proper PEM .crt (Binary write to force LF)
+            path_crt = os.path.join(folder, f"{sn}-certificate.pem.crt")
+            with open(path_crt, "wb") as f:
+                f.write(self._normalize_pem(cert_text).encode("utf-8"))
+
+            # 3) Proper PEM .key (Binary write to force LF)
+            path_key = os.path.join(folder, f"{sn}-private.pem.key")
+            with open(path_key, "wb") as f:
+                f.write(self._normalize_pem(key_text).encode("utf-8"))
+            
+            self._log(f"📁 Certificates saved (v3.1.0 format).", "success")
+
+            # 4) Root CA (Copy from project local)
+            import shutil
+            CA_FILENAME = "AWS_StarfieldCA_C2_And_G2.pem"
+            # Try to find CA in current dir or root dir (e.g., for frozen apps)
+            candidates = [
+                os.path.join(os.path.dirname(__file__), CA_FILENAME),
+                os.path.abspath(CA_FILENAME)
+            ]
+            ca_copied = False
+            for ca_src in candidates:
+                if os.path.exists(ca_src):
+                    try:
+                        shutil.copy(ca_src, os.path.join(folder, CA_FILENAME))
+                        self._log(f"✅ {CA_FILENAME} copied.", "success")
+                        ca_copied = True
+                        break
+                    except Exception as e:
+                        logger.warning(f"Could not copy Root CA: {e}")
+                        self._log(f"⚠️ Could not copy Root CA: {e}", "warning")
+            
+            if not ca_copied:
+                logger.warning(f"Root CA file '{CA_FILENAME}' not found in project.")
+                self._log(f"⚠️ Root CA file '{CA_FILENAME}' not found in project.", "warning")
+
+            # 5) AmazonRootCA.pem (legacy support)
+            legacy_src = os.path.join(os.path.dirname(__file__), "AmazonRootCA.pem")
+            if os.path.exists(legacy_src):
+                try:
+                    shutil.copy(legacy_src, os.path.join(folder, "AmazonRootCA.pem"))
+                    self._log("✅ AmazonRootCA.pem copied.", "success")
+                except Exception as e:
+                     logger.warning(f"Could not copy AmazonRootCA: {e}")
+            
         else:
             self._log("⚠️ Missing certificate or private key in SAP data.", "error")
 
@@ -182,7 +268,7 @@ class FPDController:
         self._append_history(sn, folder)
         return folder
 
-    def save_single_key(self, key_name: str, val: str, sn: str, folder: str):
+    def save_single_key(self, key_name: str, val: str, sn: str, folder: str) -> None:
         """Save a single key value to a .bin file."""
         if not val or not folder:
             return
@@ -219,7 +305,7 @@ class FPDController:
         # 1. Fetch & Save
         folder = self.verify_and_save_all(sn, output_base)
         
-        # 2. Get Keys
+        # 2. Get Keys (Refresh from sap_data after fetch)
         keys = {
             "BLE_ID": self.sap_data.get("BLE_ID", ""),
             "PATIENT_BLE_PWD": self.sap_data.get("PATIENT_BLE_PWD", "")
@@ -238,7 +324,7 @@ class FPDController:
         """Wrapper for key derivation."""
         return derive_key_hex(val).upper()
         
-    def convert_pkey(self, current_val: str) -> tuple[str, str]:
+    def convert_pkey(self, current_val: str) -> Tuple[str, str]:
         """
         Smart convert PKEY (Base36 <-> Hex).
         Returns (new_value, log_message).
@@ -261,7 +347,7 @@ class FPDController:
             
         return new_val, msg
 
-    def convert_mkey(self, current_val: str) -> tuple[str, str]:
+    def convert_mkey(self, current_val: str) -> Tuple[str, str]:
         """
         Smart convert MKEY (Base64 <-> Hex).
         Returns (new_value, log_message).
@@ -286,11 +372,10 @@ class FPDController:
     # ─────────────────────────────────────────────
     # QR GENERATION
     # ─────────────────────────────────────────────
-    def generate_qrs(self, sn: str, keys: dict, options: dict, final_folder: str = None) -> str:
+    def generate_qrs(self, sn: str, keys: dict, options: dict, final_folder: Optional[str] = None) -> str:
         """
         Generate QRs based on options.
         keys dict must contain: BLE_ID, PATIENT_BLE_PWD
-        options dict: {rtv: bool, newton: bool, davinci: bool, custom_rtv: str, custom_patient: str}
         """
         if not sn:
             raise ValueError("Serial number required.")
@@ -332,7 +417,7 @@ class FPDController:
             ble_pwd_full = ble_pwd_val
 
         # 2. Build Payloads
-        payloads = []
+        payloads: List[Tuple[str, str]] = []
         if options.get("rtv"):
             payloads.append(("RTV", f"bleSerial:{sn_full};blePassword:{ble_id_full};name:Patient;govId:123456789"))
         if options.get("newton"):
@@ -347,7 +432,7 @@ class FPDController:
              payloads.append(("Custom_PatientApp", options["custom_patient_text"]))
 
         # 3. Generate Images
-        qr_imgs = []
+        qr_imgs: List[Tuple[str, Any]] = []
         for name, payload in payloads:
             img = qrcode.make(payload)
             img_path = os.path.join(qr_dir, f"QR_{name}_{sn}.png")
@@ -366,6 +451,9 @@ class FPDController:
 
     def _create_qr_bundle(self, sn: str, qr_imgs: list, output_dir: str):
         """Helper to create the combined image."""
+        if not qr_imgs: return
+        
+        # Calculate Dimensions
         total_height = sum(img.size[1] + 100 for _, img in qr_imgs) + 140
         width = max(img.size[0] for _, img in qr_imgs) + 200
         bundle = Image.new("RGB", (width, total_height), "white")
@@ -374,14 +462,16 @@ class FPDController:
         try:
             font_title = ImageFont.truetype("arialbd.ttf", 36)
             font_label = ImageFont.truetype("arial.ttf", 28)
-        except:
+        except OSError:
+            # Fallback if fonts not found
             font_title = font_label = ImageFont.load_default()
 
         def text_size(text, font):
             try:
                 bbox = draw.textbbox((0, 0), text, font=font)
                 return bbox[2] - bbox[0], bbox[3] - bbox[1]
-            except:
+            except AttributeError:
+                # Pillow < 10
                 return draw.textsize(text, font=font)
 
         # Header
@@ -415,7 +505,7 @@ class FPDController:
     # ─────────────────────────────────────────────
     # BATCH PROCESSING
     # ─────────────────────────────────────────────
-    def batch_process_file(self, file_path: str, output_base: str, options: dict, progress_callback=None) -> dict:
+    def batch_process_file(self, file_path: str, output_base: str, options: dict, progress_callback=None) -> Dict[str, Any]:
         """
         Process a list of SNs from a file (txt).
         Returns summary dict: {'total': int, 'success': int, 'failed': int, 'errors': list}

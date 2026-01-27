@@ -1,0 +1,9 @@
+2026-01-27 16:19:33,887 [INFO] Main: 🚀 Launching Fetch Production Data (FPD) 6.0.0 on Windows
+2026-01-27 16:19:33,967 [INFO] Main: ✅ Config found: C:\Users\eldarb2\OneDrive - Medtronic PLC\Boris_Automation\New Qr 3 backup\config.yaml
+2026-01-27 16:19:34,158 [INFO] sap_api: [SAP] Loading config from: C:\Users\eldarb2\OneDrive - Medtronic PLC\Boris_Automation\New Qr 3 backup\config.yaml
+2026-01-27 16:19:47,446 [INFO] Main: 🛑 Interrupted by user.
+2026-01-27 16:20:19,941 [INFO] Main: 🚀 Launching Fetch Production Data (FPD) 6.0.0 on Windows
+2026-01-27 16:20:20,015 [INFO] Main: ✅ Config found: C:\Users\eldarb2\OneDrive - Medtronic PLC\Boris_Automation\New Qr 3 backup\config.yaml
+2026-01-27 16:20:20,175 [INFO] sap_api: [SAP] Loading config from: C:\Users\eldarb2\OneDrive - Medtronic PLC\Boris_Automation\New Qr 3 backup\config.yaml
+2026-01-27 16:20:42,116 [INFO] sap_api: [SAP] Fetching → https://tlvm7aapps032.cfrf.medtronic.com/sap/bc/zws_g_get_sn?sap-client=300&SN=253000210
+2026-01-27 16:20:50,305 [INFO] sap_api: [SAP] Fetching → https://tlvm7aapps032.cfrf.medtronic.com/sap/bc/zws_g_get_sn?sap-client=300&SN=253000210
