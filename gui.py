@@ -8,6 +8,9 @@ import logging
 from tkinter import filedialog, messagebox, BooleanVar, StringVar
 import threading
 import platform
+import threading
+import platform
+import os
 from datetime import datetime
 from typing import Optional
 
@@ -96,7 +99,13 @@ class FPDApp(ctk.CTk):
         self.tabs.add("Batch Processing")
         self.tabs.add("History")
         self.tabs.add("Settings")
-        
+        self.tabs.add("Step 2")        
+
+        # Single Device Tab
+        self.step2_tab = self.tabs.tab("Step 2")
+        self.step2_tab.grid_columnconfigure(0, weight=1)
+        self._build_step2_panel(self.step2_tab)
+
         # Single Device Tab
         self.single_tab = self.tabs.tab("Single Device")
         self.single_tab.grid_columnconfigure(0, weight=1)
@@ -238,6 +247,49 @@ class FPDApp(ctk.CTk):
             row=4, column=0, padx=20, pady=10, sticky="w"
         )
     
+    def _build_step2_panel(self, parent):
+        frame = ctk.CTkFrame(parent)
+        frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        ctk.CTkLabel(frame, text="Step 2: Keys & RTV QR", font=("Segoe UI", 20, "bold")).pack(pady=10)
+
+        # SN Entry
+        sn_frame = ctk.CTkFrame(frame)
+        sn_frame.pack(fill="x", padx=40, pady=10)
+        ctk.CTkLabel(sn_frame, text="Device Serial Number:", font=("Segoe UI", 14)).pack(side="left", padx=10)
+        self.step2_sn = ctk.CTkEntry(sn_frame, width=200)
+        self.step2_sn.pack(side="left", padx=5)
+
+        ctk.CTkButton(sn_frame, text="⚡ Generate & Fetch", command=self._on_step2_run).pack(side="left", padx=20)
+
+        # Results Panel
+        self.step2_results = ctk.CTkFrame(frame)
+        self.step2_results.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        fields = ["PKEY", "MKEY", "Key 3 (BLE_ID Derived)"]
+        self.step2_entries = {}
+        
+        for i, f in enumerate(fields):
+            row = ctk.CTkFrame(self.step2_results)
+            row.pack(fill="x", pady=5)
+            ctk.CTkLabel(row, text=f"{f}:", width=150, anchor="e").pack(side="left", padx=10)
+            entry = ctk.CTkEntry(row, width=600)
+            entry.pack(side="left", padx=5)
+            # Make readonly later? For now editable or just for show.
+            self.step2_entries[f] = entry
+
+        # RTV String
+        row_rtv = ctk.CTkFrame(self.step2_results)
+        row_rtv.pack(fill="x", pady=5)
+        ctk.CTkLabel(row_rtv, text="RTV String:", width=150, anchor="e").pack(side="left", padx=10)
+        self.step2_rtv_str = ctk.CTkEntry(row_rtv, width=600)
+        self.step2_rtv_str.pack(side="left", padx=5)
+        
+        # Output info
+        self.step2_status = ctk.CTkLabel(frame, text="", text_color="green", font=("Segoe UI", 12))
+        self.step2_status.pack(pady=10)
+
+
     def _build_batch_panel(self, parent):
         frame = ctk.CTkFrame(parent)
         frame.pack(fill="both", expand=True, padx=20, pady=20)
@@ -500,6 +552,84 @@ class FPDApp(ctk.CTk):
             self.after(0, lambda: self._on_batch_complete(summary))
         except Exception as e:
             self.after(0, lambda: self._on_batch_error(str(e)))
+            
+    def _on_step2_run(self):
+        sn = self.step2_sn.get().strip()
+        if not sn:
+            messagebox.showwarning("Missing SN", "Please enter a Serial Number.")
+            return
+
+        base = filedialog.askdirectory(title="Select Output Folder for Step 2")
+        if not base: return
+        
+        try:
+            # 1. Fetch SAP Data
+            data = self.controller.fetch_sap_data(sn)
+            
+            # 2. Update Basic Fields
+            self.step2_entries["PKEY"].delete(0, "end")
+            self.step2_entries["PKEY"].insert(0, data.get("PKEY", ""))
+            
+            self.step2_entries["MKEY"].delete(0, "end")
+            self.step2_entries["MKEY"].insert(0, data.get("MKEY", ""))
+
+            # 3. Derive Key 3
+            ble_id = data.get("BLE_ID", "")
+            key3_val = ""
+            if ble_id:
+                try:
+                    # Using controller helper
+                    key3_val = self.controller.derive_key(ble_id)
+                    # Also save it? The requirement says "create a key_3 ... as in main gui"
+                    # Main GUI saves it. Implementation plan said "Ensure key3...bin exists".
+                except Exception as e:
+                    self._log(f"Key 3 derivation error: {e}", "error")
+
+            self.step2_entries["Key 3 (BLE_ID Derived)"].delete(0, "end")
+            self.step2_entries["Key 3 (BLE_ID Derived)"].insert(0, key3_val)
+
+            # 4. Generate RTV QR Only
+            # Build keys dict for controller
+            keys = {
+                "BLE_ID": ble_id,
+                "PATIENT_BLE_PWD": data.get("PATIENT_BLE_PWD", "")
+            }
+            options = {
+                "rtv": True,
+                "newton": False,
+                "davinci": False,
+                "custom_rtv_enabled": False,
+                "custom_patient_enabled": False
+            }
+            
+            # Use dedicated Step 2 save method to avoid padding/certificate errors
+            saved_folder = self.controller.save_step2_data(sn, base)
+            
+            # Now Generate QR
+            self.controller.generate_qrs(sn, keys, options, saved_folder)
+            
+            # 5. Get RTV String to display
+            # Re-calculate it here or ask controller? Controller calculates it inside generate_qrs but doesn't return it.
+            # We can re-calculate it for display.
+            from algorithms import mod_11_10, calc_check_digit
+            sn_check = mod_11_10(sn)
+            sn_full = f"{sn}{sn_check}"
+            
+            ble_id_full = ""
+            if ble_id:
+                c1 = calc_check_digit(ble_id.lower())
+                ble_id_full = f"{ble_id}{c1.upper()}"
+            
+            rtv_str = f"bleSerial:{sn_full};blePassword:{ble_id_full};name:Patient;govId:123456789"
+            self.step2_rtv_str.delete(0, "end")
+            self.step2_rtv_str.insert(0, rtv_str)
+            
+            self.step2_status.configure(text=f"✅ Success! Saved to: {os.path.basename(saved_folder)}")
+            messagebox.showinfo("Step 2 Complete", f"Keys and RTV QR generated in:\n{saved_folder}")
+
+        except Exception as e:
+            self.step2_status.configure(text=f"❌ Error: {e}", text_color="red")
+            messagebox.showerror("Step 2 Error", str(e))
 
     def _on_batch_complete(self, summary):
         self.btn_start_batch.configure(state="normal", text="🚀 Start Batch Process")

@@ -268,6 +268,65 @@ class FPDController:
         self._append_history(sn, folder)
         return folder
 
+    def save_step2_data(self, sn: str, base_folder: Optional[str] = None) -> str:
+        """
+        Specialized fetch & save for Step 2 (Keys + RTV only).
+        Skips certificates, PATIENT_BLE_PWD checks, and specific validations irrelevant to Step 2.
+        """
+        if not sn:
+            raise ValueError("Serial Number is required.")
+        if not base_folder:
+            raise ValueError("No output folder selected.")
+        
+        # 1. Fetch Data (using existing robust fetch)
+        # Note: fetch_sap_data attempts to get everything but won't crash if optional fields are missing
+        # unless fetch_certs itself is rigid.
+        # But `fetch_certs` returns whatever it found. The error usually happens in `verify_and_save_all`
+        # when trying to process certs that might be empty or malformed.
+        
+        self._log(f"🔍 [Step 2] Fetching data for SN={sn} ...")
+        # We use fetch_keys logic essentially, but reuse fetch_sap_data to keep state consistent
+        # Use fetch_keys if we want to bypass cert parsing entirely?
+        # Let's trust fetch_sap_data for now, assuming it returns dict even if partial.
+        # If fetch_certs fails on padding, we might need a safer fetch.
+        # The user said "incorrect padding - it tries to fetch certificate".
+        # This implies fetch_certs is failing inside sap_api?
+        # NO, wait. User log showed: `fetch_sap_data` succeeded. 
+        # The error "Incorrect padding" likely comes from `verify_and_save_all` trying to normalize/save certs
+        # or `save_all_keys` trying to process a key that is bad.
+        # So we just need to skip the Cert processing block.
+        
+        data = self.fetch_sap_data(sn) 
+
+        # 2. Create Folder
+        timestamp = time.strftime("%Y%m%d_%H%M")
+        folder = os.path.join(base_folder, f"{sn}_{timestamp}_Step2")
+        os.makedirs(folder, exist_ok=True)
+        self._log(f"📁 Created output folder: {folder}")
+
+        # 3. Save ONLY Step 2 relevant keys
+        # PKEY
+        self.save_single_key("key1_PKEY", data.get("PKEY", ""), sn, folder)
+        # MKEY
+        self.save_single_key("key2_MKEY", data.get("MKEY", ""), sn, folder)
+        
+        # BLE_ID (Key 3)
+        ble_id = data.get("BLE_ID", "")
+        if ble_id:
+            try:
+                # Save raw BLE_ID if needed? Or just derived?
+                # Usually we save derived.
+                derived_key3 = derive_key_bytes(ble_id)
+                path_key3 = os.path.join(folder, f"key3_BLE_ID_{sn}.bin")
+                with open(path_key3, "wb") as f:
+                    f.write(derived_key3)
+                self._log(f"💾 Saved Key 3 (Derived) → {path_key3}", "success")
+            except Exception as e:
+                self._log(f"❌ Failed to save Key 3: {e}", "error")
+
+        self._append_history(sn, folder)
+        return folder
+
     def save_single_key(self, key_name: str, val: str, sn: str, folder: str) -> None:
         """Save a single key value to a .bin file."""
         if not val or not folder:
